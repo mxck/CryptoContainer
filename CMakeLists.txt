@@ -12,7 +12,7 @@ include_directories(include src)
 add_executable(CryptoContainer ${SOURCE_FILES})
 
 # Compile with C++11 flag
-set_property(TARGET CryptoContainer PROPERTY CXX_STANDARD 11)
+set_property(TARGET CryptoContainer PROPERTY CXX_STANDARD 14)
 
 # Set modules path
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake_modules")
