@@ -1,6 +1,7 @@
 /* Copyright 2016 - mxck */
 
 #include <iostream>
+#include <memory>
 #include <CryptoContainer/aes.hpp>
 
 /*
@@ -12,11 +13,22 @@
 */
 
 int main() {
-    auto key = cc::generateRandomAESKey();
-    auto iv = cc::generateRandomIV();
-    int bytes = cc::encryptFileToOstream(key, iv, "test.mp4", "encrypt.mp4");
-    cc::decrtyptOstreamToFile(key, iv, "encrypt.mp4", "decrypt.mp4", bytes);
+    CryptoPP::SecByteBlock key = cc::generateRandomAESKey();
+    CryptoPP::SecByteBlock iv = cc::generateRandomAES_IV();
 
-    cc::CryptWrapper cryptWrapper;
+    std::filebuf fbCrypted;
+    fbCrypted.open("test/crypt.mp4", std::ios::in|std::ios::app);
+    std::unique_ptr<std::ostream> osCryptedW(new std::ostream(&fbCrypted));
+
+    uint64_t bytes =
+        cc::encryptFileToOstream(key, iv, "test/test.mp4", osCryptedW.get());
+
+
+    std::unique_ptr<std::istream> osCryptedR(new std::istream(&fbCrypted));
+    uint64_t pos = static_cast<uint64_t>(osCryptedR->tellg()) - bytes;
+    std::cout << osCryptedR->tellg() << std::endl;
+    osCryptedR->seekg(static_cast<int64_t>(pos));
+    cc::decrtyptOstreamToFile(key, iv, osCryptedR.get(), "test/decrypt.mp4",
+                              bytes);
     return 0;
 }
