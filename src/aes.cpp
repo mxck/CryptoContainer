@@ -1,8 +1,10 @@
 /* Copyright 2016 - mxck */
 
 #include <CryptoContainer/aes.hpp>
-#include <string>
+
 #include <iostream>
+#include <string>
+#include <utility>
 
 CryptoPP::SecByteBlock cc::generateRandomAES_IV() {
     CryptoPP::AutoSeededRandomPool rnd;
@@ -18,96 +20,113 @@ CryptoPP::SecByteBlock cc::generateRandomAESKey() {
     return key;
 }
 
-cc::EncryptAES::EncryptAES(std::string sourceFilename, std::ostream* target) :
-                key(cc::generateRandomAESKey()),
-                iv(cc::generateRandomAES_IV()),
-                encryption(Encryption(key, key.size(), iv)),
-                totalBytesEncoded(0),
-                eof(false),
-                finalized(false) {
-    filter = new CryptoPP::StreamTransformationFilter(
-        encryption, new CryptoPP::FileSink(*target));
-    fileSource = std::make_unique<CryptoPP::FileSource>(
-        sourceFilename.c_str(), false, filter);
+/*
+    CryptAESBase
+*/
+const bool& cc::CryptAESBase::getComplete() const {
+    return complete;
 }
 
-void cc::EncryptAES::finalize() {
-    if (finalized) {
+const uint64_t& cc::CryptAESBase::getBytesCoded() const {
+    return bytesCoded;
+}
+
+void cc::CryptAESBase::pumpAll() {
+    if (complete) {
+        return;
+    }
+
+    while (!complete) {
+        pump();
+    }
+}
+
+cc::CryptAESBase::~CryptAESBase() {}
+
+/*
+    EncryptAES
+*/
+cc::EncryptAES::EncryptAES(CryptoPP::SecByteBlock key,
+                           CryptoPP::SecByteBlock iv,
+                           std::istream* source,
+                           std::ostream* target)
+    : encryption(Encryption(key, key.size(), iv)) {
+    filter = new CryptoPP::StreamTransformationFilter(
+        encryption, new CryptoPP::FileSink(*target));
+    fileSource = std::make_unique<CryptoPP::FileSource>(*source, false, filter);
+}
+
+void cc::EncryptAES::atEOF() {
+    if (complete) {
         return;
     }
 
     filter->ChannelMessageEnd(CryptoPP::DEFAULT_CHANNEL);
 
-    // Round totalBytesEncoded to be divisible by blocksize
-    if (totalBytesEncoded % CryptoPP::AES::BLOCKSIZE != 0) {
-        totalBytesEncoded =
-            (((totalBytesEncoded + CryptoPP::AES::BLOCKSIZE - 1) /
-            CryptoPP::AES::MAX_KEYLENGTH) *
-            CryptoPP::AES::MAX_KEYLENGTH);
+    // Round bytesCoded to be divisible by blocksize
+    if (bytesCoded % CryptoPP::AES::BLOCKSIZE != 0) {
+        bytesCoded =
+            (((bytesCoded + CryptoPP::AES::BLOCKSIZE - 1) /
+            CryptoPP::AES::BLOCKSIZE) *
+            CryptoPP::AES::BLOCKSIZE);
     }
+
+    complete = true;
 }
 
 void cc::EncryptAES::pump() {
-    if (eof) {
+    if (complete) {
         return;
     }
 
     uint64_t pumped = fileSource->Pump(CryptoPP::AES::BLOCKSIZE);
 
     if (pumped == 0) {
-        eof = true;
+        atEOF();
         return;
     }
 
-    totalBytesEncoded += pumped;
+    bytesCoded += pumped;
 }
 
-void cc::EncryptAES::pumpAll() {
-    if (eof) {
+cc::EncryptAES::~EncryptAES() {}
+
+/*
+    DecryptAES
+*/
+cc::DecryptAES::DecryptAES(CryptoPP::SecByteBlock key,
+                           CryptoPP::SecByteBlock iv,
+                           std::istream* source,
+                           std::ostream* target,
+                           uint64_t fileSize)
+    : decryption(Decryption(key, key.size(), iv)),
+      bytesToDecrypt(fileSize) {
+    filter = new CryptoPP::StreamTransformationFilter(
+        decryption, new CryptoPP::FileSink(*target));
+    fileSource = std::make_unique<CryptoPP::FileSource>(*source, false, filter);
+}
+
+void cc::DecryptAES::pump() {
+    if (complete) {
         return;
     }
 
-    while (!eof) {
-        pump();
+    uint64_t pumped = fileSource->Pump(CryptoPP::AES::BLOCKSIZE);
+
+    if (pumped == 0 && !complete) {
+        throw std::runtime_error("Error: End of file");
     }
 
-    finalize();
-}
+    bytesCoded += pumped;
 
-uint64_t cc::EncryptAES::getTotalBytesEncoded() const {
-    return totalBytesEncoded;
-}
-
-
-void cc::decrtyptOstreamToFile(CryptoPP::SecByteBlock key,
-                               CryptoPP::SecByteBlock iv,
-                               std::istream* source,
-                               std::string target,
-                               uint64_t bytesToDecrypt) {
-    CryptoPP::CBC_Mode<CryptoPP::AES>::Decryption dec(key, key.size(), iv);
-
-    // Filesource get owning of filter, so no need to delete it
-    CryptoPP::StreamTransformationFilter* const filter =
-        new CryptoPP::StreamTransformationFilter(
-            dec, new CryptoPP::FileSink(target.c_str(), true));
-
-    CryptoPP::FileSource fileSource(*source, false, filter);
-
-    uint64_t totalBytesEncoded = 0;
-    while (!fileSource.SourceExhausted()) {
-        uint64_t pumped = fileSource.Pump(CryptoPP::AES::BLOCKSIZE);
-
-        if (pumped == 0) {
-            // @@ TODO: Select the most appropriate error or create own
-            throw std::runtime_error("Error: End of file");
-        }
-
-        totalBytesEncoded += pumped;
-
-        if (totalBytesEncoded - bytesToDecrypt <= 0) {
-            break;
-        }
+    if (bytesToDecrypt - bytesCoded <= 0) {
+        atEOF();
     }
+}
 
+void cc::DecryptAES::atEOF() {
     filter->ChannelMessageEnd(CryptoPP::DEFAULT_CHANNEL);
+    complete = true;
 }
+
+cc::DecryptAES::~DecryptAES() {}

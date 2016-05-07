@@ -4,15 +4,16 @@
 #define INCLUDE_CRYPTOCONTAINER_AES_HPP_
 
 #include <cryptopp/aes.h>
-#include <cryptopp/osrng.h>  // Random
-#include <cryptopp/modes.h>
-#include <cryptopp/filters.h>
 #include <cryptopp/files.h>
+#include <cryptopp/filters.h>
+#include <cryptopp/modes.h>
+#include <cryptopp/osrng.h>  // Random
 
 #include <stdint.h>
-#include <string>
-#include <memory>
 
+#include <memory>
+#include <string>
+#include <utility>
 
 namespace cc {
 // Generate a random key using maximum length
@@ -21,43 +22,58 @@ CryptoPP::SecByteBlock generateRandomAESKey();
 // Generate a random initialization vector
 CryptoPP::SecByteBlock generateRandomAES_IV();
 
-struct EncryptedAESFile {
-    std::string filename;
-    CryptoPP::SecByteBlock key;
-    CryptoPP::SecByteBlock iv;
-    uint64_t startPos;
-    uint64_t sizeInBytes;
+
+template<typename T>
+struct input {
 };
 
-class EncryptAES {
- private:
-    const CryptoPP::SecByteBlock key;
-    const CryptoPP::SecByteBlock iv;
 
-    // Filter will be deleted in fileSource destruction
+class CryptAESBase {
+ protected:
     CryptoPP::StreamTransformationFilter* filter;
     std::unique_ptr<CryptoPP::FileSource> fileSource;
-
-    typedef CryptoPP::CBC_Mode<CryptoPP::AES>::Encryption Encryption;
-    Encryption encryption;
-
-    uint64_t totalBytesEncoded;
-    bool eof;
-    bool finalized;
+    bool complete = false;
+    uint64_t bytesCoded = 0;
+    virtual void atEOF() = 0;
  public:
-    EncryptAES(std::string sourceFilename, std::ostream* target);
-    void pump();
-    void finalize();
+    const bool& getComplete() const;
+    const uint64_t& getBytesCoded() const;
     void pumpAll();
-    uint64_t getTotalBytesEncoded() const;
+
+    CryptAESBase() {}
+    virtual void pump() = 0;
+    virtual ~CryptAESBase();
 };
 
-// Decrypt ostream to file, until reach size of bytesToDecrypt
-void decrtyptOstreamToFile(CryptoPP::SecByteBlock key,
-                           CryptoPP::SecByteBlock iv,
-                           std::istream* source,
-                           std::string target,
-                           uint64_t bytesToDecrypt);
+class EncryptAES : public CryptAESBase {
+ private:
+    typedef CryptoPP::CBC_Mode<CryptoPP::AES>::Encryption Encryption;
+    Encryption encryption;
+    void atEOF();
+ public:
+    virtual void pump();
+    EncryptAES(CryptoPP::SecByteBlock key,
+               CryptoPP::SecByteBlock iv,
+               std::istream* source,
+               std::ostream* target);
+    ~EncryptAES();
+};
+
+class DecryptAES : public CryptAESBase {
+ private:
+    typedef CryptoPP::CBC_Mode<CryptoPP::AES>::Decryption Decryption;
+    Decryption decryption;
+    void atEOF();
+    uint64_t bytesToDecrypt;
+ public:
+    virtual void pump();
+    DecryptAES(CryptoPP::SecByteBlock key,
+               CryptoPP::SecByteBlock iv,
+               std::istream* source,
+               std::ostream* target,
+               uint64_t bytesNeedToDecrypt);
+    ~DecryptAES();
+};
 }  // namespace cc
 
 #endif  // INCLUDE_CRYPTOCONTAINER_AES_HPP_
