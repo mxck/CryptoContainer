@@ -4,8 +4,17 @@ project (CryptoContainer)
 # Own includes
 set(SOURCE_FILES
     main.cpp
-    src/aes.cpp
+
+    # AES
     include/CryptoContainer/aes.hpp
+    src/aes.cpp
+
+    # Container
+    include/CryptoContainer/container.hpp
+    src/container.cpp
+
+    # Utils
+    include/CryptoContainer/utils.hpp
 )
 
 include_directories(include src)
@@ -18,7 +27,12 @@ set_property(TARGET CryptoContainer PROPERTY CXX_STANDARD 14)
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake_modules")
 
 # CryptoPP
+# @@ TODO: Check this custom module at windows
 find_package(CryptoPP REQUIRED)
 include_directories(${CRYPTOPP_INCLUDE_DIRS})
 target_link_libraries(CryptoContainer ${CRYPTOPP_LIBRARIES})
 
+# Boost
+find_package(Boost 1.60.0 REQUIRED serialization)
+include_directories(${Boost_INCLUDE_DIRS})
+target_link_libraries(CryptoContainer ${Boost_LIBRARIES})

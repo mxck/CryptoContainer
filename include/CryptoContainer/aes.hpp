@@ -22,18 +22,15 @@ CryptoPP::SecByteBlock generateRandomAESKey();
 // Generate a random initialization vector
 CryptoPP::SecByteBlock generateRandomAES_IV();
 
-
-template<typename T>
-struct input {
-};
-
-
+/*
+  Classes used to write from stream to stream.
+*/
 class CryptAESBase {
  protected:
     CryptoPP::StreamTransformationFilter* filter;
     std::unique_ptr<CryptoPP::FileSource> fileSource;
-    bool complete = false;
     uint64_t bytesCoded = 0;
+    bool complete = false;
     virtual void atEOF() = 0;
  public:
     const bool& getComplete() const;

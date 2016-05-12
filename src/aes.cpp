@@ -79,7 +79,7 @@ void cc::EncryptAES::pump() {
         return;
     }
 
-    uint64_t pumped = fileSource->Pump(CryptoPP::AES::BLOCKSIZE);
+    uint64_t pumped = fileSource->Pump(2048);
 
     if (pumped == 0) {
         atEOF();
