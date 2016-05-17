@@ -9,20 +9,20 @@
 #include <map>
 #include <set>
 #include <string>
+#include <list>
 
 #include <CryptoContainer/aes.hpp>
 #include <CryptoContainer/utils.hpp>
 #include <boost/archive/text_oarchive.hpp>
 #include <boost/archive/text_iarchive.hpp>
 
-
 namespace cc {
 struct DirectoryEntry {
     std::string filename;
     CryptoPP::SecByteBlock key;
     CryptoPP::SecByteBlock iv;
-    uint64_t startPos;
-    uint64_t sizeInBytes;
+    int64_t startPos;
+    int64_t sizeInBytes;
 
     friend class boost::serialization::access;
 
@@ -58,18 +58,30 @@ struct DirectoryEntry {
     }
 };
 
-class ContainerAES {
+class Container {
  private:
+    std::filebuf fileBuf;
+    std::unique_ptr<std::iostream> fileStream;
+
     std::map<std::string, cc::DirectoryEntry> directory;
-    std::set<std::string> pathsToAdd;
-    std::string directoryToString() const;
-    void setDirectoryFromString(std::string dirString);
-    void writeDirectory(std::ostream* target);
+    int64_t lastWritePos;
+
+    std::unique_ptr<CryptoPP::RSA::PublicKey> publicKey;
+
+    Container();
  public:
-    ContainerAES();
-    void addFile(std::string path);
-    void save(std::string path);
-    void unpack(std::string path);
+    void addFiles(std::set<std::string> paths);
+    const std::map<std::string, cc::DirectoryEntry>& getDirectory() const;
+    // void unpackFile(std::string path);
+    // void unpackAll(std::string pathToDir);
+
+    static std::unique_ptr<Container> openExistedContainer(
+        std::string path,
+        CryptoPP::RSA::PublicKey publicKey,
+        CryptoPP::RSA::PrivateKey privateKey);
+
+    static std::unique_ptr<Container> openNewContainer(
+        std::string path, CryptoPP::RSA::PublicKey publicKey);
 };
 }  // namespace cc
 

@@ -46,29 +46,15 @@ inline typename isRSAKey<T>::type RSAKeyFromString(const std::string& str) {
     return key;
 }
 
+
 std::pair<CryptoPP::RSA::PrivateKey, CryptoPP::RSA::PublicKey>
-generateRSAKeys() {
-    CryptoPP::AutoSeededRandomPool rng;
-    CryptoPP::InvertibleRSAFunction params;
-    params.GenerateRandomWithKeySize(rng, 4096);
+    generateRSAKeys();
 
-    CryptoPP::RSA::PrivateKey privateKey(params);
-    CryptoPP::RSA::PublicKey publicKey(params);
+std::string encryptStringRSA(CryptoPP::RSA::PublicKey publicKey,
+                             std::string input);
 
-    return std::make_pair(privateKey, publicKey);
-}
-
-std::string encryppStringRSA(CryptoPP::RSA::PublicKey publicKey, std::string input) {
-    CryptoPP::AutoSeededRandomPool rng;
-    CryptoPP::RSAES_OAEP_SHA_Encryptor encryptor(publicKey);
-
-    std::string result;
-    CryptoPP::StringSource ss(input, true,
-        new CryptoPP::PK_EncryptorFilter(rng, encryptor,
-            new CryptoPP::StringSink(result)));
-
-    return result;
-}
+std::string decryptStringRSA(CryptoPP::RSA::PrivateKey privateKey,
+                             std::string input);
 }  // namespace cc
 
 #endif  // INCLUDE_CRYPTOCONTAINER_RSA_HPP_

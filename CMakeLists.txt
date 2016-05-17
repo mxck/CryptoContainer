@@ -15,6 +15,10 @@ set(SOURCE_FILES
 
     # Utils
     include/CryptoContainer/utils.hpp
+
+    # RSA
+    include/CryptoContainer/rsa.hpp
+    src/rsa.cpp
 )
 
 include_directories(include src)
@@ -33,6 +37,6 @@ include_directories(${CRYPTOPP_INCLUDE_DIRS})
 target_link_libraries(CryptoContainer ${CRYPTOPP_LIBRARIES})
 
 # Boost
-find_package(Boost 1.60.0 REQUIRED serialization)
+find_package(Boost 1.60.0 REQUIRED serialization filesystem)
 include_directories(${Boost_INCLUDE_DIRS})
 target_link_libraries(CryptoContainer ${Boost_LIBRARIES})

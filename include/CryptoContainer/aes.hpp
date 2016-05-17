@@ -29,12 +29,12 @@ class CryptAESBase {
  protected:
     CryptoPP::StreamTransformationFilter* filter;
     std::unique_ptr<CryptoPP::FileSource> fileSource;
-    uint64_t bytesCoded = 0;
+    int64_t bytesCoded = 0;
     bool complete = false;
     virtual void atEOF() = 0;
  public:
     const bool& getComplete() const;
-    const uint64_t& getBytesCoded() const;
+    const int64_t& getBytesCoded() const;
     void pumpAll();
 
     CryptAESBase() {}
@@ -61,14 +61,14 @@ class DecryptAES : public CryptAESBase {
     typedef CryptoPP::CBC_Mode<CryptoPP::AES>::Decryption Decryption;
     Decryption decryption;
     void atEOF();
-    uint64_t bytesToDecrypt;
+    int64_t bytesToDecrypt;
  public:
     virtual void pump();
     DecryptAES(CryptoPP::SecByteBlock key,
                CryptoPP::SecByteBlock iv,
                std::istream* source,
                std::ostream* target,
-               uint64_t bytesNeedToDecrypt);
+               int64_t bytesNeedToDecrypt);
     ~DecryptAES();
 };
 }  // namespace cc

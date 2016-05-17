@@ -27,7 +27,7 @@ const bool& cc::CryptAESBase::getComplete() const {
     return complete;
 }
 
-const uint64_t& cc::CryptAESBase::getBytesCoded() const {
+const int64_t& cc::CryptAESBase::getBytesCoded() const {
     return bytesCoded;
 }
 
@@ -79,7 +79,8 @@ void cc::EncryptAES::pump() {
         return;
     }
 
-    uint64_t pumped = fileSource->Pump(2048);
+    // @@ TODO: Move to value to const or static
+    int64_t pumped = static_cast<int64_t>(fileSource->Pump(2048));
 
     if (pumped == 0) {
         atEOF();
@@ -98,7 +99,7 @@ cc::DecryptAES::DecryptAES(CryptoPP::SecByteBlock key,
                            CryptoPP::SecByteBlock iv,
                            std::istream* source,
                            std::ostream* target,
-                           uint64_t fileSize)
+                           int64_t fileSize)
     : decryption(Decryption(key, key.size(), iv)),
       bytesToDecrypt(fileSize) {
     filter = new CryptoPP::StreamTransformationFilter(
@@ -111,7 +112,8 @@ void cc::DecryptAES::pump() {
         return;
     }
 
-    uint64_t pumped = fileSource->Pump(CryptoPP::AES::BLOCKSIZE);
+    int64_t pumped = static_cast<int64_t>(
+        fileSource->Pump(CryptoPP::AES::BLOCKSIZE));
 
     if (pumped == 0 && !complete) {
         throw std::runtime_error("Error: End of file");
