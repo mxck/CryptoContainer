@@ -24,67 +24,104 @@
 
 #include <boost/filesystem.hpp>
 
-
-// // std::string cc::Container::directoryToString() const {
-//     std::stringstream ss;
-//     // Disable archive header for security reasons
-//     boost::archive::binary_oarchive oarch(
-//         ss, boost::archive::archive_flags::no_header);
-//     oarch << directory;
-//     return ss.str();
-// // }
-
-// void cc::Container::setDirectoryFromString(std::string str) {
-//     std::stringstream ss(str);
-//     boost::archive::binary_iarchive iarch(
-//         ss, boost::archive::archive_flags::no_header);
-//     iarch >> directory;
-// }
-
 cc::Container::Container() {}
 
-void cc::Container::addFiles(std::set<std::string> paths) {
-    if (!paths.size()) {
+int cc::Container::signSize = 512;
+
+void cc::Container::addFileToQueue(std::string path, std::string relativeTo) {
+    if (!boost::filesystem::exists(path)) {
         return;
     }
 
-    fileStream->seekg(lastWritePos);
-    /**
-        Pack files, if file exist pack it and add to directory
-    */
-    for (auto& path : paths) {
-        if (!boost::filesystem::exists(path) ||
-            !boost::filesystem::is_regular_file(path)) {
-            continue;
+    if (boost::filesystem::is_directory(path)) {
+        boost::filesystem::recursive_directory_iterator dirItt(path);
+
+        const boost::filesystem::path normalizedRelativeToPath =
+            boost::filesystem::path(path).parent_path();
+
+        for (auto& dirPath : dirItt) {
+            if (!boost::filesystem::is_regular_file(dirPath)) {
+                continue;
+            }
+
+            addFileToQueue(dirPath.path().string(),
+                           normalizedRelativeToPath.string());
         }
 
-        std::filebuf fb;
-        fb.open(path.c_str(), std::ios::in);
-        std::unique_ptr<std::istream> input =
-            std::make_unique<std::istream>(&fb);
-
-        cc::DirectoryEntry entry;
-
-        entry.filename = path;
-        entry.startPos = fileStream->tellg();
-        entry.key = cc::generateRandomAESKey();
-        entry.iv = cc::generateRandomAES_IV();
-
-        cc::EncryptAES encrypter(entry.key, entry.iv,
-                                 input.get(), fileStream.get());
-        encrypter.pumpAll();
-        entry.sizeInBytes = encrypter.getBytesCoded();
-
-        directory.insert(std::make_pair(path, entry));
+        return;
     }
 
-    /**
-        Save directory
-    */
+    boost::filesystem::path filePath(path);
+
+    if (relativeTo.size()) {
+        filePath = boost::filesystem::relative(filePath, relativeTo);
+    }
+
+    filesToAdd.insert(std::make_pair(path, filePath.string()));
+}
+
+void cc::Container::writeFile(std::pair<std::string, std::string> paths) {
+    if (!boost::filesystem::exists(paths.first)
+        || !boost::filesystem::is_regular_file(paths.first)) {
+        return;
+    }
+
+    // Check if file alredy exists in container
+    if (directory.find(paths.second) != directory.end()) {
+        return;
+    }
+
+    fileStream->seekp(lastWritePos);
+
+    // Open file
+    std::filebuf fb;
+    fb.open(paths.first.c_str(), std::ios::in);
+    std::unique_ptr<std::istream> input =
+        std::make_unique<std::istream>(&fb);
+
+    // Create new directory entry
+    cc::DirectoryEntry entry;
+
+    // Store relative path
+    entry.filename = paths.second;
+    entry.startPos = fileStream->tellg();
+    entry.key = cc::generateRandomAESKey();
+    entry.iv = cc::generateRandomAES_IV();
+
+    cc::EncryptAES encrypter(entry.key, entry.iv,
+                             input.get(), fileStream.get());
+    encrypter.pumpAll();
+    entry.sizeInBytes = encrypter.getBytesCoded();
+
+    directory.insert(std::make_pair(paths.second, entry));
+
+    lastWritePos = fileStream->tellp();
+}
+
+void cc::Container::save() {
+    if (!filesToAdd.size()) {
+        return;
+    }
+
+    for (const auto& paths : filesToAdd) {
+        writeFile(paths);
+    }
+
+    filesToAdd.clear();
 
     if (!directory.size()) {
         return;
     }
+
+    writeDirectoryAndSign();
+}
+
+void cc::Container::writeDirectoryAndSign() {
+    if (!directory.size() || !publicKey) {
+        return;
+    }
+
+    fileStream->seekp(lastWritePos);
 
     // Convert directory to string
     std::stringstream ss;
@@ -96,6 +133,7 @@ void cc::Container::addFiles(std::set<std::string> paths) {
     CryptoPP::SecByteBlock key = cc::generateRandomAESKey();
     CryptoPP::SecByteBlock iv = cc::generateRandomAES_IV();
 
+    // Write crypted directory
     std::stringbuf stringBuf(ss.str());
     std::unique_ptr<std::istream> in =
         std::make_unique<std::istream>(&stringBuf);
@@ -103,23 +141,20 @@ void cc::Container::addFiles(std::set<std::string> paths) {
     encrypter.pumpAll();
     int64_t directorySize = encrypter.getBytesCoded();
 
-    /**
-        Create sign
-    */
+    // Create sign
     std::stringstream enctyptedSign;
     enctyptedSign << cc::SecByteBlockToString(key);
     enctyptedSign << cc::SecByteBlockToString(iv);
     enctyptedSign << std::setfill('0') << std::setw(19) << directorySize;
     std::string cryptedSign = cc::encryptStringRSA(*publicKey,
                                                    enctyptedSign.str());
-    // std::cout << iv.data() << std::endl;
-    /**
-        Write sign to file
-    */
 
-    // std::cout << cryptedSign << std::endl;
-    // std::cout << cryptedSign.size() << std::endl;
-    fileStream->write(cryptedSign.c_str(), 512);
+    // Write crypted sign
+    fileStream->write(cryptedSign.c_str(), cc::Container::signSize);
+}
+
+void cc::Container::addFileOrFolder(std::string path) {
+    addFileToQueue(path);
 }
 
 std::unique_ptr<cc::Container> cc::Container::openNewContainer(
@@ -140,6 +175,8 @@ std::unique_ptr<cc::Container> cc::Container::openNewContainer(
     container->fileStream =
         std::make_unique<std::iostream>(&container->fileBuf);
 
+    container->lastWritePos = 0;
+
     return std::unique_ptr<cc::Container>(container.release());
 }
 
@@ -148,47 +185,63 @@ std::unique_ptr<cc::Container> cc::Container::openExistedContainer(
         CryptoPP::RSA::PublicKey publicKey,
         CryptoPP::RSA::PrivateKey privateKey) {
     if (!boost::filesystem::exists(path)
-        || boost::filesystem::file_size(path) < 512) {
+        || boost::filesystem::file_size(path) < cc::Container::signSize) {
         return nullptr;
     }
 
     std::unique_ptr<cc::Container> container(new cc::Container());
 
+    // Set public key
     container->publicKey =
         std::make_unique<CryptoPP::RSA::PublicKey>(publicKey);
 
     std::ios::openmode fileFlags =
         std::ios::in | std::ios::out | std::ios::binary;
 
+    // Create filestream and open file
     container->fileBuf.open(path, fileFlags);
     container->fileStream =
         std::make_unique<std::iostream>(&container->fileBuf);
 
-    container->fileStream->seekg(-512, std::ios::end);
-    std::string test(512, ' ');
-    container->fileStream->read(&test[0], 512);
+    // Set stream read possition
+    container->fileStream->seekg(-cc::Container::signSize, std::ios::end);
 
-    test = cc::decryptStringRSA(privateKey, test);
-    // std::cout << test.size() << std::endl;
+    // Read sign
+    std::string sign(cc::Container::signSize, ' ');
+    container->fileStream->read(&sign[0], cc::Container::signSize);
 
-    const std::string keyString = test.substr(0, 32);
+    // Decrypt sign
+    sign = cc::decryptStringRSA(privateKey, sign);
+
+    // Read key
+    const std::string keyString = sign.substr(0, CryptoPP::AES::MAX_KEYLENGTH);
     CryptoPP::SecByteBlock key = cc::SecByteBlockFromString(keyString);
-    const std::string ivString = test.substr(32, 16);
+
+    // Read IV
+    const std::string ivString = sign.substr(
+        CryptoPP::AES::MAX_KEYLENGTH, CryptoPP::AES::BLOCKSIZE);
     CryptoPP::SecByteBlock iv = cc::SecByteBlockFromString(ivString);
 
-    const int64_t size = std::stoi(test.substr(48, 19));
+    // Read directory size
+    const int64_t size = std::stoi(sign.substr(
+        CryptoPP::AES::MAX_KEYLENGTH + CryptoPP::AES::BLOCKSIZE, 19));
 
-    container->fileStream->seekg(-512 - size, std::ios::end);
+    container->fileStream->seekg(
+        -cc::Container::signSize - size, std::ios::end);
+
+    // Set last write possition
     container->lastWritePos = container->fileStream->tellg();
 
+    // Decrypt directory
     std::stringbuf enctyptedDirectoryString;
     std::unique_ptr<std::ostream> target =
         std::make_unique<std::ostream>(&enctyptedDirectoryString);
 
-    cc::DecryptAES dectypted(
+    cc::DecryptAES dectypter(
         key, iv, container->fileStream.get(), target.get(), size);
-    dectypted.pumpAll();
+    dectypter.pumpAll();
 
+    // Set directory from string
     std::stringstream ss(enctyptedDirectoryString.str());
     boost::archive::binary_iarchive iarch(
         ss, boost::archive::archive_flags::no_header);

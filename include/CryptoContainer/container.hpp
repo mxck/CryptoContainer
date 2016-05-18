@@ -10,6 +10,7 @@
 #include <set>
 #include <string>
 #include <list>
+#include <utility>
 
 #include <CryptoContainer/aes.hpp>
 #include <CryptoContainer/utils.hpp>
@@ -60,17 +61,31 @@ struct DirectoryEntry {
 
 class Container {
  private:
+    static int signSize;
+
+    Container();
+
     std::filebuf fileBuf;
-    std::unique_ptr<std::iostream> fileStream;
+    std::unique_ptr<std::iostream> fileStream;  // @@ Remove this
+
 
     std::map<std::string, cc::DirectoryEntry> directory;
+
+    // This need to set after each file save or read
     int64_t lastWritePos;
 
     std::unique_ptr<CryptoPP::RSA::PublicKey> publicKey;
 
-    Container();
+    // First - original path, second - stored path
+    std::map<std::string, std::string> filesToAdd;
+    void addFileToQueue(std::string path, std::string relativeTo = "");
+
+    void writeFile(std::pair<std::string, std::string> paths);
+    void writeDirectoryAndSign();
+
  public:
-    void addFiles(std::set<std::string> paths);
+    void addFileOrFolder(std::string path);
+    void save();
     const std::map<std::string, cc::DirectoryEntry>& getDirectory() const;
     // void unpackFile(std::string path);
     // void unpackAll(std::string pathToDir);
