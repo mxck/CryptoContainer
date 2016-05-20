@@ -18,5 +18,4 @@ inline CryptoPP::SecByteBlock SecByteBlockFromString(const std::string& str) {
 }
 }  // namespace cc
 
-
 #endif  // INCLUDE_CRYPTOCONTAINER_UTILS_HPP_

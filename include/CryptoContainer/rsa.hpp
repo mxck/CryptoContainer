@@ -6,6 +6,7 @@
 #include <cryptopp/rsa.h>
 #include <cryptopp/osrng.h>
 #include <cryptopp/files.h>
+#include <sstream>
 #include <string>
 #include <utility>
 
@@ -46,6 +47,23 @@ inline typename isRSAKey<T>::type RSAKeyFromString(const std::string& str) {
     return key;
 }
 
+template<typename T>
+inline typename isRSAKey<T>::type loadKeyFromFile(std::string filename) {
+    std::ifstream in(filename);
+    std::stringstream buffer;
+    buffer << in.rdbuf();
+    return RSAKeyFromString<typename isRSAKey<T>::type>(buffer.str());
+}
+
+template<typename T>
+inline void saveKeyToFile(std::string filename,
+                          typename isRSAKey<T>::type key) {
+    std::filebuf buf;
+    buf.open(filename,
+        std::ios::trunc | std::ios::out | std::ios::binary);
+    std::ostream os(&buf);
+    os << RSAKeyToString<typename isRSAKey<T>::type>(key);
+}
 
 std::pair<CryptoPP::RSA::PrivateKey, CryptoPP::RSA::PublicKey>
     generateRSAKeys();

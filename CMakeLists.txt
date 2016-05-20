@@ -37,6 +37,6 @@ include_directories(${CRYPTOPP_INCLUDE_DIRS})
 target_link_libraries(CryptoContainer ${CRYPTOPP_LIBRARIES})
 
 # Boost
-find_package(Boost 1.60.0 REQUIRED serialization filesystem)
+find_package(Boost 1.60.0 REQUIRED serialization filesystem program_options)
 include_directories(${Boost_INCLUDE_DIRS})
 target_link_libraries(CryptoContainer ${Boost_LIBRARIES})

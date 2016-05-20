@@ -82,13 +82,17 @@ class Container {
 
     void writeFile(std::pair<std::string, std::string> paths);
     void writeDirectoryAndSign();
+    void unpackFileToDisk(const DirectoryEntry& entry, std::string targetPath);
 
  public:
     void addFileOrFolder(std::string path);
+    void unpack(std::string path, std::string targetDirectory = "");
+    void unpackAll(std::string path = "");
+
+    // Save changes
     void save();
+
     const std::map<std::string, cc::DirectoryEntry>& getDirectory() const;
-    // void unpackFile(std::string path);
-    // void unpackAll(std::string pathToDir);
 
     static std::unique_ptr<Container> openExistedContainer(
         std::string path,

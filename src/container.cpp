@@ -165,7 +165,9 @@ std::unique_ptr<cc::Container> cc::Container::openNewContainer(
         std::make_unique<CryptoPP::RSA::PublicKey>(publicKey);
 
     boost::filesystem::path p(path);
-    boost::filesystem::create_directories(p.parent_path());
+    if (p.has_parent_path()) {
+        boost::filesystem::create_directories(p.parent_path());
+    }
 
     std::ios::openmode fileFlags =
         std::ios::in | std::ios::out | std::ios::binary | std::ios::trunc;
@@ -248,6 +250,52 @@ std::unique_ptr<cc::Container> cc::Container::openExistedContainer(
     iarch >> container->directory;
 
     return std::unique_ptr<cc::Container>(container.release());
+}
+
+void cc::Container::unpackFileToDisk(const DirectoryEntry& entry,
+                                     std::string targetPath) {
+    boost::filesystem::path oPath(
+        boost::filesystem::path(targetPath) / entry.filename);
+
+    // Create directories to file
+    boost::filesystem::path parentPath = oPath.parent_path();
+    if (!parentPath.empty()) {
+        boost::filesystem::create_directories(parentPath);
+    }
+
+    fileStream->seekp(entry.startPos);
+
+    std::ios::openmode fileFlags =
+        std::ios::out | std::ios::binary | std::ios::trunc;
+
+    std::filebuf oFilebuf;
+    oFilebuf.open(oPath.string(), fileFlags);
+    std::unique_ptr<std::ostream> oFileStream =
+        std::make_unique<std::ostream>(&oFilebuf);
+
+    cc::DecryptAES::DecryptAES decrypt(entry.key,
+                                       entry.iv,
+                                       fileStream.get(),
+                                       oFileStream.get(),
+                                       entry.sizeInBytes);
+
+    decrypt.pumpAll();
+}
+
+void cc::Container::unpack(std::string path, std::string targetDirectory) {
+    auto directoryEntryItt = directory.find(path);
+
+    if (directoryEntryItt == directory.end()) {
+        return;
+    }
+
+    unpackFileToDisk(directoryEntryItt->second, targetDirectory);
+}
+
+void cc::Container::unpackAll(std::string path) {
+    for (auto& entry : directory) {
+        unpackFileToDisk(entry.second, path);
+    }
 }
 
 const std::map<std::string, cc::DirectoryEntry>&
